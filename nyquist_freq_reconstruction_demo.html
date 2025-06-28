@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconstrução usando a interpolação de Shannon</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <!-- Add MathJax for LaTeX rendering -->
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <h2>Reconstrução usando a interpolação de Shannon</h2>
+  <!-- Formula label -->
+  <div style="margin-bottom: 10px;">
+    <b>Sinal original:</b>
+    \( x(t) = \frac{\sin(2\pi (t-2))}{2\pi (t-2)} \)
+  </div>
+  <label for="samplingRate">Frequência de amostragem (Hz): <span id="fsLabel">10</span></label>
+  <input type="range" id="samplingRate" min="1" max="20" value="10" step="0.1">
+  <div id="timePlot" style="width:100%;height:400px;"></div>
+  <div id="freqPlot" style="width:100%;height:300px;"></div>
+
+  <script>
+    const fsSlider = document.getElementById('samplingRate');
+    const fsLabel = document.getElementById('fsLabel');
+
+    function sinc(x) {
+      return x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
+    }
+
+    function generateOriginalSignal(t) {
+      const x = 2 * Math.PI * (t - 2); // Bandwidth = 2 Hz
+      return x === 0 ? 1 : Math.sin(x) / x;
+    }
+
+    function analyticalFT(f) {
+      return Math.abs(f) <= 2 ? 1 : 0; // Bandwidth = 2 Hz
+    }
+
+    function updatePlots(fs) {
+      fsLabel.textContent = fs;
+      const T = 1 / fs;
+      const t_vals = Array.from({length: 800}, (_, i) => i * 4 / 799);
+      const x_vals = t_vals.map(t => generateOriginalSignal(t));
+
+      const samplePoints = [];
+      const y_samples = [];
+      for (let n = 0; n * T <= 4; n++) {
+        let t = n * T;
+        samplePoints.push(t);
+        y_samples.push(generateOriginalSignal(t));
+      }
+
+      // Shannon reconstruction
+      const x_reconstructed = t_vals.map(t => {
+        let sum = 0;
+        for (let n = 0; n < samplePoints.length; n++) {
+          const tn = samplePoints[n];
+          sum += y_samples[n] * sinc((t - tn) / T);
+        }
+        return sum;
+      });
+
+      const traceOriginal = {
+        x: t_vals,
+        y: x_vals,
+        mode: 'lines',
+        name: 'Sinal x(t)',
+        line: {color: 'blue'}
+      };
+
+      const traceSamples = {
+        x: samplePoints,
+        y: y_samples,
+        mode: 'markers',
+        name: 'Amostras',
+        marker: {color: 'red', size: 6}
+      };
+
+      const traceReconstructed = {
+        x: t_vals,
+        y: x_reconstructed,
+        mode: 'lines',
+        name: 'Sinal reconstruído',
+        line: {dash: 'dot', color: 'green'}
+      };
+
+      Plotly.newPlot('timePlot', [traceOriginal, traceSamples, traceReconstructed], {
+        title: 'Domínio do Tempo',
+        xaxis: {title: 'Tempo (s)'},
+        yaxis: {title: 'Amplitude'},
+        margin: {t: 50}
+      });
+
+      // Frequency domain
+      const f_vals = Array.from({length: 1000}, (_, i) => i * 50 / 999);
+      const X_vals = f_vals.map(f => analyticalFT(f));
+
+      const sampledSpectrum = f_vals.map(f => {
+        let sum = 0;
+        const maxRep = Math.floor(50 / fs) + 2;
+        for (let m = -maxRep; m <= maxRep; m++) {
+          let shifted = f - m * fs;
+          sum += (Math.abs(shifted) <= 2) ? 1 : 0;
+        }
+        return sum;
+      });
+
+      const traceOriginalFT = {
+        x: f_vals,
+        y: X_vals,
+        mode: 'lines',
+        name: 'Espectro do sinal original',
+        line: {color: 'blue'}
+      };
+
+      const traceSampledFT = {
+        x: f_vals,
+        y: sampledSpectrum,
+        mode: 'lines',
+        name: 'Espectro do sinal amostrado',
+        line: {dash: 'dot', color: 'red'}
+      };
+
+      Plotly.newPlot('freqPlot', [traceOriginalFT, traceSampledFT], {
+        title: 'Domínio da Frequência',
+        xaxis: {title: 'Frequência (Hz)'},
+        yaxis: {title: '|X(f)|'},
+        margin: {t: 50}
+      });
+    }
+
+    fsSlider.addEventListener('input', () => {
+      updatePlots(parseFloat(fsSlider.value));
+    });
+
+    updatePlots(parseFloat(fsSlider.value));
+  </script>
+</body>
+</html>

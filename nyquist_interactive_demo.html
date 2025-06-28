@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ilustração do teorema de Shannon-Nyquist</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #fafafa;
+      color: #222;
+      margin: 20px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ilustração do teorema de Shannon-Nyquist</h1>
+  <p>
+    Ajuste a frequência do sinal de entrada e a taxa de amostragem para ver como ocorre o fenômeno de aliasing quando a frequência do sinal excede metade da taxa de amostragem.
+  </p>
+  <label>
+    Frequência do sinal cossenoidal (Hz):
+    <input type="range" id="freqSlider" min="1" max="30" value="10" />
+    <span id="freqValue">10</span>
+  </label>
+  <label>
+    Taxa de amostragem f<sub>s</sub> (Hz):
+    <input type="range" id="samplingSlider" min="5" max="60" value="20" step="1" />
+    <span id="samplingValue">20</span>
+  </label>
+
+  <h2>Domínio do tempo</h2>
+  <canvas id="timeCanvas" width="900" height="200"></canvas>
+
+  <h2>Domínio da frequência</h2>
+  <canvas id="freqCanvas" width="900" height="200"></canvas>
+
+  <script>
+    const freqSlider = document.getElementById("freqSlider");
+    const samplingSlider = document.getElementById("samplingSlider");
+    const freqValue = document.getElementById("freqValue");
+    const samplingValue = document.getElementById("samplingValue");
+    const timeCanvas = document.getElementById("timeCanvas");
+    const timeCtx = timeCanvas.getContext("2d");
+    const freqCanvas = document.getElementById("freqCanvas");
+    const freqCtx = freqCanvas.getContext("2d");
+
+    function drawTimeSignal(freq, sampling) {
+      const ctx = timeCtx;
+      const width = timeCanvas.width;
+      const height = timeCanvas.height;
+      ctx.clearRect(0, 0, width, height);
+
+      const duration = 1; // seconds
+      const step = 0.001;
+      const amplitude = height / 2 - 20;
+
+      // X-axis
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.strokeStyle = "#ccc";
+      ctx.stroke();
+
+      // Original continuous signal - BLUE (cosine)
+      ctx.beginPath();
+      ctx.strokeStyle = "#0074D9"; // Blue
+      for (let t = 0; t <= duration; t += step) {
+        const x = (t / duration) * width;
+        const y = height / 2 - Math.cos(2 * Math.PI * freq * t) * amplitude;
+        if (t === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Sampling points
+      ctx.fillStyle = "#777"; // medium gray
+      ctx.strokeStyle = "#aaa"; // light gray
+      for (let t = 0; t <= duration; t += 1 / sampling) {
+        const x = (t / duration) * width;
+        const y = height / 2 - Math.cos(2 * Math.PI * freq * t) * amplitude;
+        ctx.beginPath();
+        ctx.moveTo(x, height / 2);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+
+      // Aliased waveform (if undersampled)
+      if (sampling < 2 * freq) {
+        const aliasFreq = Math.abs(sampling - freq);
+        ctx.beginPath();
+        ctx.strokeStyle = "#444"; // dark gray dashed
+        ctx.setLineDash([5, 5]);
+        for (let t = 0; t <= duration; t += step) {
+          const x = (t / duration) * width;
+          const y = height / 2 - Math.cos(2 * Math.PI * aliasFreq * t) * amplitude;
+          if (t === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    function drawFrequencyDomain(freq, sampling) {
+      const ctx = freqCtx;
+      const width = freqCanvas.width;
+      const height = freqCanvas.height;
+      ctx.clearRect(0, 0, width, height);
+
+      const nyquist = sampling / 2;
+      const step = 5;
+      const maxFreq = 80;
+
+      // X-axis
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.strokeStyle = "#ccc";
+      ctx.stroke();
+
+      // Frequency axis ticks and labels
+      ctx.fillStyle = "#222";
+      ctx.font = "10px sans-serif";
+      for (let f = 0; f <= maxFreq; f += step) {
+        const x = (f / maxFreq) * width;
+        ctx.beginPath();
+        ctx.moveTo(x, height / 2 - 5);
+        ctx.lineTo(x, height / 2 + 5);
+        ctx.strokeStyle = "#aaa";
+        ctx.stroke();
+        ctx.fillText(f.toString(), x - 5, height / 2 + 15);
+      }
+
+      // Original frequency - BLUE
+      const x = (freq / maxFreq) * width;
+      ctx.beginPath();
+      ctx.moveTo(x, height / 2 - 50);
+      ctx.lineTo(x, height / 2);
+      ctx.strokeStyle = "#0074D9"; // Blue
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.fillText(`${freq} Hz`, x - 10, height / 2 - 55);
+
+      // Aliased frequency (if any)
+      if (sampling < 2 * freq) {
+        const alias = Math.abs(sampling - freq);
+        const xa = (alias / maxFreq) * width;
+        ctx.beginPath();
+        ctx.moveTo(xa, height / 2 - 50);
+        ctx.lineTo(xa, height / 2);
+        ctx.strokeStyle = "#444";
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillText(`alias ${alias} Hz`, xa - 15, height / 2 - 55);
+      }
+
+      // Nyquist frequency
+      const nx = (nyquist / maxFreq) * width;
+      ctx.beginPath();
+      ctx.moveTo(nx, 0);
+      ctx.lineTo(nx, height);
+      ctx.strokeStyle = "#aaa";
+      ctx.setLineDash([2, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillText(`f`, nx + 5, 15);
+      ctx.fillText(`s`, nx + 8, 18);
+      ctx.fillText(`/2 = ${nyquist} Hz`, nx + 14, 15);
+
+      // Sampling frequency
+      const ns = (sampling / maxFreq) * width;
+      ctx.beginPath();
+      ctx.moveTo(ns, 0);
+      ctx.lineTo(ns, height);
+      ctx.strokeStyle = "#aaa";
+      ctx.setLineDash([2, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillText(`f`, ns + 5, 15);
+      ctx.fillText(`s`, ns + 8, 18);
+      ctx.fillText(` = ${sampling} Hz`, ns + 14, 15);
+    }
+
+    function update() {
+      const freq = parseInt(freqSlider.value);
+      const sampling = parseInt(samplingSlider.value);
+      freqValue.textContent = freq;
+      samplingValue.textContent = sampling;
+      drawTimeSignal(freq, sampling);
+      drawFrequencyDomain(freq, sampling);
+    }
+
+    freqSlider.addEventListener("input", update);
+    samplingSlider.addEventListener("input", update);
+
+    update();
+  </script>
+</body>
+</html>
