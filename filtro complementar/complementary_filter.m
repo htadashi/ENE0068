@@ -1,3 +1,7 @@
+% (C) Copyright 2025 Hugo Tadashi
+% This script uses a mobile device's accelerometer and gyroscope
+% to estimate angles using a complementary filter.
+
 clear; clc;
 
 % Initialize mobile device

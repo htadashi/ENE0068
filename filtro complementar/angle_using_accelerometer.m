@@ -1,3 +1,7 @@
+% (C) Copyright 2025 Hugo Tadashi
+% This script uses a mobile device's accelerometer to estimate angles
+% using both the atan2 function and a small angle approximation.
+
 clear; clc;
 % Initialize mobile device connection
 m = mobiledev;

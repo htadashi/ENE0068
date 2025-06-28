@@ -1,3 +1,8 @@
+% (C) Copyright 2025 Hugo Tadashi
+% This script uses a mobile device's gyroscope to estimate angles
+% using numerical integration and a high-pass filter.
+
+
 clear; clc;
 m = mobiledev;
 m.AngularVelocitySensorEnabled = 1;
