@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Representação de Polinômios por Valor</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+  </script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    .control-panel {
+      display: flex;
+      align-items: flex-start;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .inputs label {
+      margin-top: 5px;
+    }
+    .math-output {
+      font-size: 1.2rem;
+      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      background-color: #f9f9f9;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.05);
+      min-width: 280px;
+    }
+    #plot {
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Representação de Polinômios por Valor</h2>
+
+  <div class="control-panel">
+    <div class="inputs">
+      <label for="Ainput">Coeficientes de A(x) (separados por vírgula):</label>
+      <input id="Ainput" value="1,2,1">
+
+      <label for="Binput">Coeficientes de B(x) (separados por vírgula):</label>
+      <input id="Binput" value="1,-1">
+
+      <button onclick="updatePlot()">Plotar</button>
+    </div>
+
+    <div class="math-output">
+      <strong>Expressões Polinomiais</strong>
+      <div id="latex-math"></div>
+    </div>
+  </div>
+
+  <div id="plot" style="width: 100%; height: 80vh;"></div>
+
+  <script>
+    function evalPoly(coeffs, x) {
+      return coeffs.reduceRight((acc, c) => acc * x + c, 0);
+    }
+
+    function polyMultiply(A, B) {
+      const result = new Array(A.length + B.length - 1).fill(0);
+      for (let i = 0; i < A.length; i++) {
+        for (let j = 0; j < B.length; j++) {
+          result[i + j] += A[i] * B[j];
+        }
+      }
+      return result;
+    }
+
+    function parseCoeffs(input) {
+      return input.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+    }
+
+    function coeffsToLatex(coeffs, name = 'f') {
+      const terms = [];
+      const deg = coeffs.length - 1;
+      for (let i = 0; i <= deg; i++) {
+        const c = coeffs[i];
+        if (Math.abs(c) < 1e-10) continue;
+        const power = deg - i;
+        let term = '';
+
+        if (c < 0) {
+          term += terms.length === 0 ? '-' : ' - ';
+        } else {
+          term += terms.length === 0 ? '' : ' + ';
+        }
+
+        const absC = Math.abs(c);
+        if (absC !== 1 || power === 0) term += absC.toString();
+        if (power >= 1) term += 'x';
+        if (power > 1) term += `^{${power}}`;
+        terms.push(term);
+      }
+      const body = terms.length ? terms.join('') : '0';
+      return `\\(${name}(x) = ${body}\\)`;
+    }
+
+    function updatePlot() {
+      const A_coeffs = parseCoeffs(document.getElementById("Ainput").value);
+      const B_coeffs = parseCoeffs(document.getElementById("Binput").value);
+      const C_coeffs = polyMultiply(A_coeffs, B_coeffs);
+
+      const x_vals = Array.from({length: 400}, (_, i) => -2 + 5 * i / 399);
+      const A_vals = x_vals.map(x => evalPoly(A_coeffs, x));
+      const B_vals = x_vals.map(x => evalPoly(B_coeffs, x));
+      const C_vals = x_vals.map(x => evalPoly(C_coeffs, x));
+
+      const n = C_coeffs.length - 1;
+      const sample_x = Array.from({length: n + 1}, (_, i) => -1 + 3 * i / n);
+      const sample_A = sample_x.map(x => evalPoly(A_coeffs, x));
+      const sample_B = sample_x.map(x => evalPoly(B_coeffs, x));
+      const sample_C = sample_x.map(x => evalPoly(C_coeffs, x));
+
+      const latexHTML = [
+        coeffsToLatex(A_coeffs, 'A'),
+        coeffsToLatex(B_coeffs, 'B'),
+        coeffsToLatex(C_coeffs, 'C')
+      ].join('<br>');
+      document.getElementById("latex-math").innerHTML = latexHTML;
+      MathJax.typesetPromise();
+
+      const traces = [
+        {
+          x: x_vals, y: A_vals, mode: 'lines',
+          name: 'A(x)', line: {color: 'blue'}
+        },
+        {
+          x: x_vals, y: B_vals, mode: 'lines',
+          name: 'B(x)', line: {color: 'green'}
+        },
+        {
+          x: x_vals, y: C_vals, mode: 'lines',
+          name: 'C(x) = A(x)·B(x)', line: {color: 'red'}
+        },
+        {
+          x: sample_x, y: sample_A, mode: 'markers',
+          name: 'Amostras de A(x)', marker: {color: 'blue', symbol: 'circle', size: 8}
+        },
+        {
+          x: sample_x, y: sample_B, mode: 'markers',
+          name: 'Amostras de B(x)', marker: {color: 'green', symbol: 'square', size: 8}
+        },
+        {
+          x: sample_x, y: sample_C, mode: 'markers',
+          name: 'Amostras de C(x)', marker: {color: 'red', symbol: 'triangle-up', size: 8}
+        }
+      ];
+
+      const layout = {
+        xaxis: {title: 'x'},
+        yaxis: {title: 'Valor'},
+        legend: {orientation: 'h', font: {size: 14}},
+      };
+
+      Plotly.newPlot('plot', traces, layout);
+    }
+
+    updatePlot();
+  </script>
+</body>
+</html>
