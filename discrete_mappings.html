@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapeamento de discretização do plano s para o plano z</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            background-color: #f4f4f9; 
+            color: #333; 
+            margin: 0; 
+            padding: 30px 20px; 
+        }
+        h1 { font-size: 1.8rem; margin-bottom: 5px; color: #2c3e50; text-align: center; }
+        p.subtitle { margin-bottom: 25px; color: #7f8c8d; text-align: center; font-size: 1.1em;}
+        
+        .controls { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+            width: 100%; 
+            max-width: 900px; 
+            margin-bottom: 30px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            box-sizing: border-box;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .input-group { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+            font-size: 1.1em;
+            font-weight: 500;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        input[type="range"] { flex-grow: 1; cursor: pointer; }
+        select { 
+            padding: 8px 12px; 
+            font-size: 1rem; 
+            border-radius: 6px; 
+            border: 1px solid #ccc; 
+            cursor: pointer;
+            flex-grow: 1;
+        }
+        
+        .info-panel { 
+            display: flex; 
+            flex-direction: column;
+            gap: 10px;
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border: 1px solid #e9ecef;
+        }
+        
+        .readouts {
+            display: flex;
+            justify-content: space-around;
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        
+        .stability-status {
+            text-align: center;
+            font-size: 0.95em;
+            font-weight: 600;
+            padding-top: 10px;
+            border-top: 1px dashed #ccc;
+        }
+
+        .container { 
+            display: flex; 
+            gap: 20px; 
+            flex-wrap: nowrap; 
+            justify-content: center; 
+            width: 100%;
+            max-width: 1000px;
+            overflow-x: auto; 
+            padding-bottom: 10px;
+            box-sizing: border-box;
+        }
+        
+        .plot-container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1 1 50%; 
+            min-width: 320px; 
+            box-sizing: border-box;
+        }
+        .plot-container h3 { margin-top: 0; color: #34495e; font-weight: 600; text-align: center;}
+        
+        svg { 
+            border: 1px solid #e0e0e0; 
+            border-radius: 6px; 
+            background: #ffffff; 
+            cursor: crosshair; 
+        }
+        
+        .axis path, .axis line { stroke: #bdc3c7; }
+        .axis text { fill: #7f8c8d; font-size: 12px; }
+        .grid line { stroke: #f0f0f0; stroke-width: 1px; }
+        
+        .region-s { fill: rgba(52, 152, 219, 0.1); }
+        .region-z-unit { fill: transparent; stroke: #95a5a6; stroke-dasharray: 4,4; stroke-width: 1.5px;}
+        .region-z-mapped { fill: rgba(52, 152, 219, 0.15); stroke: #3498db; stroke-width: 1.5px;}
+        
+        .point { fill: #e74c3c; stroke: #c0392b; stroke-width: 2px; cursor: grab; }
+        .point:active { cursor: grabbing; }
+        .point-z { fill: #2ecc71; stroke: #27ae60; stroke-width: 2px; }
+        
+        .legend { font-size: 12px; fill: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <h1>Regras de mapeamento para discretização</h1>
+    <p class="subtitle" id="mapping-formula">Mapeamento: <strong>s &rarr; (1 - z⁻¹) / T</strong></p>
+    
+    <div class="controls">
+        <div class="input-row">
+            <div class="input-group">
+                <label for="method-select">Método:</label>
+                <select id="method-select">
+                    <option value="backward">Diferença para trás</option>
+                    <option value="forward">Diferença para frente</option>
+                    <option value="bilinear">Bilinear (Tustin)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="t-slider">Período de amostragem (T): <span id="t-val" style="color:#2980b9;">0.10</span> s</label>
+                <input type="range" id="t-slider" min="0.01" max="1.0" step="0.01" value="0.1">
+            </div>
+            <div class="input-group">
+                <label for="y-scale-select">Escala y (plano s):</label>
+                <select id="y-scale-select">
+                    <option value="linear">Linear</option>
+                    <option value="log">Logarítmica</option>
+                </select>
+            </div>
+        </div>
+        <div class="info-panel">
+            <div class="readouts">
+                <div id="s-info" style="color: #c0392b;">s = -2.00 + j 2.00</div>
+                <div id="z-info" style="color: #27ae60;">z = 0.00 + j 0.00</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="plot-container">
+            <h3>Contínuo (plano s)</h3>
+            <div id="s-plane" style="width: 100%;"></div>
+        </div>
+        <div class="plot-container">
+            <h3>Discreto (plano z)</h3>
+            <div id="z-plane" style="width: 100%;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Dimensions
+        const width = 400, height = 400;
+        const margin = {top: 20, right: 20, bottom: 40, left: 40};
+        const w = width - margin.left - margin.right;
+        const h = height - margin.top - margin.bottom;
+
+        // Application State
+        let T = 0.1;
+        let method = 'backward';
+        let yScaleMode = 'linear';
+        let s = { re: -2, im: 2 };
+        let z = { re: 0, im: 0 };
+
+        const yDomainLinearS = [-6, 6];
+        const yDomainLogS = [-100, 100];
+        const yDomainZ = [-2, 2];
+
+        function makeYScale(domain, range) {
+            if (yScaleMode === 'log') {
+                // Signed logarithmic scale: preserves negative/positive frequencies and keeps 0 finite.
+                return d3.scaleSymlog().constant(1).domain(domain).range(range);
+            }
+
+            return d3.scaleLinear().domain(domain).range(range);
+        }
+
+        function yTicksFor(domain) {
+            return yScaleMode === 'log'
+                ? [-100, -30, -10, -3, -1, 0, 1, 3, 10, 30, 100].filter(d => d >= domain[0] && d <= domain[1])
+                : undefined;
+        }
+
+        function formatLogTick(d) {
+            return Math.abs(d) >= 10 ? d3.format("~s")(d) : d;
+        }
+
+        // Complex Math for Z calculation
+        function calcZ() {
+            if (method === 'backward') {
+                // z = 1 / (1 - s*T)
+                const denom = Math.pow(1 - s.re * T, 2) + Math.pow(s.im * T, 2);
+                z.re = (1 - s.re * T) / denom;
+                z.im = (s.im * T) / denom;
+            } else if (method === 'forward') {
+                // z = 1 + s*T
+                z.re = 1 + s.re * T;
+                z.im = s.im * T;
+            } else if (method === 'bilinear') {
+                // z = (1 + s*T/2) / (1 - s*T/2)
+                const t2 = T / 2;
+                const A = 1 + s.re * t2;
+                const B = s.im * t2;
+                const C = 1 - s.re * t2;
+                const D = -s.im * t2;
+                const denom = C * C + D * D;
+                
+                // Complex division formula
+                z.re = (A * C + B * D) / denom;
+                z.im = (B * C - A * D) / denom;
+            }
+        }
+
+        // --- S-Plane Setup ---
+        const svgS = d3.select("#s-plane").append("svg")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet")
+            .style("width", "100%")
+            .style("height", "auto")
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const xScaleS = d3.scaleLinear().domain([-10, 4]).range([0, w]);
+        let yScaleS = makeYScale(yDomainLinearS, [h, 0]);
+
+        // S-plane Grid
+        const sGridX = svgS.append("g").attr("class", "grid").attr("transform", `translate(0,${h})`).call(d3.axisBottom(xScaleS).tickSize(-h).tickFormat(""));
+        const sGridY = svgS.append("g").attr("class", "grid").call(d3.axisLeft(yScaleS).tickSize(-w).tickFormat(""));
+
+        // S-plane LHP (Stability Region)
+        const sDomain = xScaleS.domain();
+        svgS.append("rect").attr("class", "region-s")
+            .attr("x", xScaleS(sDomain[0])).attr("y", 0)
+            .attr("width", xScaleS(0) - xScaleS(sDomain[0])).attr("height", h);
+
+        svgS.append("text").attr("class", "legend").attr("x", xScaleS(sDomain[0] + 0.5)).attr("y", yScaleS(5.5)).text("Estável (semiplano esquerdo)");
+
+        // S-plane Axes
+        const sAxisX = svgS.append("g").attr("class", "axis").attr("transform", `translate(0,${yScaleS(0)})`).call(d3.axisBottom(xScaleS));
+        const sAxisY = svgS.append("g").attr("class", "axis").attr("transform", `translate(${xScaleS(0)},0)`).call(d3.axisLeft(yScaleS));
+
+        // S-plane Draggable Point
+        const sPoint = svgS.append("circle")
+            .attr("class", "point")
+            .attr("r", 8)
+            .attr("cx", xScaleS(s.re))
+            .attr("cy", yScaleS(s.im));
+
+        // --- Z-Plane Setup ---
+        const svgZ = d3.select("#z-plane").append("svg")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet")
+            .style("width", "100%")
+            .style("height", "auto")
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const scaleZ = 2.0; 
+        const xScaleZ = d3.scaleLinear().domain([-scaleZ, scaleZ]).range([0, w]);
+        let yScaleZ = makeYScale(yDomainZ, [h, 0]);
+
+        // Z-plane Grid
+        const zGridX = svgZ.append("g").attr("class", "grid").attr("transform", `translate(0,${h})`).call(d3.axisBottom(xScaleZ).tickSize(-h).tickFormat(""));
+        const zGridY = svgZ.append("g").attr("class", "grid").call(d3.axisLeft(yScaleZ).tickSize(-w).tickFormat(""));
+
+        // Mapped Stability Regions (Three separate objects toggled via logic)
+        const zDomain = xScaleZ.domain();
+        
+        // Forward Difference maps the LHP to Re(z) < 1
+        const forwardRegion = svgZ.append("rect")
+            .attr("class", "region-z-mapped")
+            .attr("x", xScaleZ(zDomain[0]))
+            .attr("y", 0)
+            .attr("width", xScaleZ(1) - xScaleZ(zDomain[0]))
+            .attr("height", h)
+            .style("display", "none");
+
+        // Backward Difference maps the LHP to a circle at 0.5 with r=0.5
+        const backwardRegion = svgZ.append("circle")
+            .attr("class", "region-z-mapped")
+            .attr("cx", xScaleZ(0.5)).attr("cy", yScaleZ(0))
+            .attr("r", xScaleZ(0.5) - xScaleZ(0));
+            
+        // Bilinear matches the unit circle exactly
+        const bilinearRegion = svgZ.append("circle")
+            .attr("class", "region-z-mapped")
+            .attr("cx", xScaleZ(0)).attr("cy", yScaleZ(0))
+            .attr("r", xScaleZ(1) - xScaleZ(0))
+            .style("display", "none");
+
+        const mappedLegend = svgZ.append("text")
+            .attr("class", "legend")
+            .attr("x", xScaleZ(0.5)).attr("y", yScaleZ(0.6))
+            .style("text-anchor", "middle").text("Semiplano esquerdo mapeado");
+
+        // Unit Circle (True discrete stability boundary)
+        svgZ.append("circle").attr("class", "region-z-unit")
+            .attr("cx", xScaleZ(0)).attr("cy", yScaleZ(0))
+            .attr("r", xScaleZ(1) - xScaleZ(0));
+
+        // Z-plane Axes
+        const zAxisX = svgZ.append("g").attr("class", "axis").attr("transform", `translate(0,${yScaleZ(0)})`).call(d3.axisBottom(xScaleZ));
+        const zAxisY = svgZ.append("g").attr("class", "axis").attr("transform", `translate(${xScaleZ(0)},0)`).call(d3.axisLeft(yScaleZ));
+
+        // Z-plane Calculated Point
+        const zPoint = svgZ.append("circle")
+            .attr("class", "point-z")
+            .attr("r", 8);
+
+        // --- Interactions & Updates ---
+        const drag = d3.drag()
+            .on("drag", (event) => {
+                s.re = Math.max(sDomain[0], Math.min(sDomain[1], xScaleS.invert(event.x)));
+                const yDomainS = yScaleS.domain();
+                s.im = Math.max(yDomainS[0], Math.min(yDomainS[1], yScaleS.invert(event.y)));
+                update();
+            });
+        sPoint.call(drag);
+
+        d3.select("#t-slider").on("input", function() {
+            T = +this.value;
+            d3.select("#t-val").text(T.toFixed(2));
+            update();
+        });
+
+        d3.select("#method-select").on("change", function() {
+            method = this.value;
+            
+            // Update mapping formula text
+            if (method === 'backward') {
+                d3.select("#mapping-formula").html("Mapeamento: <strong>s &rarr; (1 - z⁻¹) / T</strong>");
+            } else if (method === 'forward') {
+                d3.select("#mapping-formula").html("Mapeamento: <strong>s &rarr; (z - 1) / T</strong>");
+            } else {
+                d3.select("#mapping-formula").html("Mapeamento: <strong>s &rarr; (2 / T) * (z - 1) / (z + 1)</strong>");
+            }
+            
+            update();
+        });
+
+        d3.select("#y-scale-select").on("change", function() {
+            yScaleMode = this.value;
+            updateScales();
+            update();
+        });
+
+        function updateScales() {
+            const yDomainS = yScaleMode === 'log' ? yDomainLogS : yDomainLinearS;
+            yScaleS = makeYScale(yDomainS, [h, 0]);
+
+            // Clamp the current point so it remains inside the visible s-plane domain.
+            s.im = Math.max(yDomainS[0], Math.min(yDomainS[1], s.im));
+
+            const yTicksS = yTicksFor(yDomainS);
+            const yAxisS = d3.axisLeft(yScaleS);
+            const yGridS = d3.axisLeft(yScaleS).tickSize(-w).tickFormat("");
+
+            if (yTicksS) {
+                yAxisS.tickValues(yTicksS).tickFormat(formatLogTick);
+                yGridS.tickValues(yTicksS);
+            }
+
+            sGridY.call(yGridS);
+            sAxisY.call(yAxisS);
+            sAxisX.attr("transform", `translate(0,${yScaleS(0)})`).call(d3.axisBottom(xScaleS));
+
+            svgS.select("text.legend")
+                .attr("y", yScaleS(yDomainS[1] * 0.85));
+        }
+
+        function update() {
+            calcZ();
+            
+            sPoint.attr("cx", xScaleS(s.re)).attr("cy", yScaleS(s.im));
+            zPoint.attr("cx", xScaleZ(z.re)).attr("cy", yScaleZ(z.im));
+
+            // Toggle Mapped Stability Regions
+            if (method === 'backward') {
+                backwardRegion.style("display", "block");
+                forwardRegion.style("display", "none");
+                bilinearRegion.style("display", "none");
+                mappedLegend.attr("x", xScaleZ(0.5)).attr("y", yScaleZ(0.6));
+            } else if (method === 'forward') {
+                backwardRegion.style("display", "none");
+                forwardRegion.style("display", "block");
+                bilinearRegion.style("display", "none");
+                mappedLegend.attr("x", xScaleZ(-0.5)).attr("y", yScaleZ(1.8));
+            } else {
+                backwardRegion.style("display", "none");
+                forwardRegion.style("display", "none");
+                bilinearRegion.style("display", "block");
+                mappedLegend.attr("x", xScaleZ(0)).attr("y", yScaleZ(1.1));
+            }
+
+            const imSign = s.im >= 0 ? '+' : '-';
+            const zImSign = z.im >= 0 ? '+' : '-';
+            d3.select("#s-info").text(`s = ${s.re.toFixed(2)} ${imSign} j ${Math.abs(s.im).toFixed(2)}`);
+            d3.select("#z-info").text(`z = ${z.re.toFixed(2)} ${zImSign} j ${Math.abs(z.im).toFixed(2)}`);
+
+            // Advanced Stability Logic
+            const isStableS = s.re < 0;
+            const zMag = Math.sqrt(z.re * z.re + z.im * z.im);
+            const isStableZ = zMag < 1;
+
+        }
+
+        // Initialize
+        update();
+    </script>
+</body>
+</html>
