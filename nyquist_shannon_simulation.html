@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard de Análise Espectral</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 12px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; }
+        
+        /* Painel de Controle - Layout Fluido */
+        .painel { 
+            background: white; 
+            padding: 12px 20px; 
+            border-radius: 8px; 
+            width: 98%; 
+            max-width: 1920px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06); 
+            margin: 0 auto 10px auto; 
+            box-sizing: border-box;
+        }
+        
+        .flex-row { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 15px; 
+            align-items: center; 
+            justify-content: space-between; 
+        }
+        
+        .input-group { 
+            flex: 2; 
+            min-width: 320px; 
+            display: flex; 
+            flex-direction: column;
+        }
+        .input-wrapper {
+            display: flex;
+            gap: 6px;
+        }
+        .input-group label {
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #5f6368;
+            margin-bottom: 2px;
+        }
+        input[type=text] { 
+            flex: 1;
+            padding: 6px 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #202124;
+        }
+        input[type=text]:focus { border-color: #1a73e8; outline: none; }
+        
+        .controles-amostragem { 
+            flex: 1.2; 
+            min-width: 260px; 
+            color: white; 
+            padding: 8px 14px; 
+            border-radius: 6px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .filtro-container {
+            flex: 0.6;
+            min-width: 140px;
+        }
+
+        button.btn-analise { 
+            padding: 6px 14px; 
+            background: #202124; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 0.9em;
+        }
+
+        .btn-filtro { 
+            width: 100%;
+            padding: 8px 12px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            color: white; 
+            font-size: 0.9em;
+        }
+        
+        .seletor-graficos { 
+            display: flex; 
+            gap: 12px; 
+            background: #f8f9fa; 
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            margin-top: 10px; 
+            flex-wrap: wrap; 
+            align-items: center;
+            border: 1px solid #e8eaed;
+        }
+        .opcao-check { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; color: #5f6368; }
+        .opcao-check input { cursor: pointer; width: 14px; height: 14px; }
+
+        .grid-graficos { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); 
+            gap: 10px; 
+            width: 98%; 
+            max-width: 1920px; 
+            margin: 0 auto; 
+        }
+        
+        .container-grafico { 
+            background: white; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            box-shadow: 0 1px 5px rgba(0,0,0,0.05); 
+            display: none; 
+            box-sizing: border-box;
+        }
+        
+        .container-grafico.ativo { display: block; }
+        
+        h3 { margin: 2px 0 6px 0; font-size: 0.9em; color: #3c4043; text-align: center; }
+        canvas { width: 100% !important; height: 160px !important; }
+    </style>
+</head>
+<body>
+
+    <div class="painel">
+        <div class="flex-row">
+            <div class="input-group">
+                <label for="inputEq">Equação do Sinal \(x(t)\)</label>
+                <div class="input-wrapper">
+                    <input type="text" id="inputEq" value="exp(-5000 * (t - 0.5)^2)">
+                    <button class="btn-analise" onclick="analisarEGerarFourier()">Analisar</button>
+                </div>
+            </div>
+            
+            <div id="painelSlider" class="controles-amostragem" style="background: #1a73e8;">
+                <div style="font-size: 0.85em; font-weight: 500; margin-bottom: 2px; text-align: center;">
+                    \(f_s\): <span id="displayFs">30</span> Hz | \(B\): <span id="bandaReal">0</span> Hz
+                </div>
+                <input type="range" id="sliderFs" min="1" max="200" value="30" oninput="atualizarSimulacaoAmostragem()">
+                <div id="statusNyquist" style="font-size: 0.75em; font-weight: bold; text-align: center;"></div>
+            </div>
+
+            <div class="filtro-container">
+                <button id="btnFiltro" class="btn-filtro" style="background: #27ae60;" onclick="alternarEstadoFiltro()">Filtro: LIGADO</button>
+            </div>
+        </div>
+
+        <div class="seletor-graficos">
+            <span style="font-size: 0.8em; font-weight: bold; color: #202124; margin-right: 5px;">Visualizar:</span>
+            <label class="opcao-check"><input type="checkbox" checked onchange="alternarVisibilidadeGrafico('c1', this)"> \(x(t)\)</label>
+            <label class="opcao-check"><input type="checkbox" checked onchange="alternarVisibilidadeGrafico('c2', this)"> \(x[n]\)</label>
+            <label class="opcao-check"><input type="checkbox" checked onchange="alternarVisibilidadeGrafico('c3', this)"> \(x_{rec}(t)\)</label>
+            <label class="opcao-check"><input type="checkbox" checked onchange="alternarVisibilidadeGrafico('c4', this)"> \(|X(f)|\)</label>
+            <label class="opcao-check"><input type="checkbox" checked onchange="alternarVisibilidadeGrafico('c5', this)"> \(|X^*(f)|\)</label>
+        </div>
+    </div>
+
+    <div class="grid-graficos">
+        <div id="c1" class="container-grafico ativo"><h3>1. Sinal Contínuo \( x(t) \)</h3><canvas id="canvasOriginal"></canvas></div>
+        <div id="c2" class="container-grafico ativo"><h3>2. Amostras \( x[n] \)</h3><canvas id="canvasAmostrado"></canvas></div>
+        <div id="c3" class="container-grafico ativo"><h3>3. Reconstrução \( x_{rec}(t) \)</h3><canvas id="canvasReconstruido"></canvas></div>
+        <div id="c4" class="container-grafico ativo"><h3>4. Espectro Original (Magnitude)</h3><canvas id="canvasEspectroOrig"></canvas></div>
+        <div id="c5" class="container-grafico ativo"><h3>5. Espectro Amostrado (Magnitude) + Filtro</h3><canvas id="canvasEspectroAmostra"></canvas></div>
+    </div>
+
+<script>
+// ============================================================================
+// CONFIGURAÇÕES GLOBAIS E VARIÁVEIS DE ESTADO
+// ============================================================================
+let instanciasGraficos = {};              // Guarda as referências do Chart.js para destruição/atualização
+let coeficientesFourier = [];             // Array de objetos complexos (armaza os cn de -N até +N)
+let larguraBandaSinalB = 5;               // Frequência máxima detectada onde o sinal é relevante (em Hz)
+let isFiltroAtivo = true;                 // Controla se o Filtro de Reconstrução Ideal está ligado
+
+// Constantes de simulação física
+const LIMITE_VISUALIZACAO_FREQ = 200;    // Eixo X máximo nos gráficos de espectro (-200Hz a +200Hz)
+const LIMITE_HARMONICOS_FOURIER = 200;   // Número de harmônicos (N) calculados na série de Fourier
+const RESOLUCAO_PONTOS_TEMPO = 200;      // Quantidade de pontos para renderizar as curvas contínuas (eixo t)
+
+// ============================================================================
+// FUNÇÕES DE INTERAÇÃO COM A INTERFACE (UI)
+// ============================================================================
+function alternarVisibilidadeGrafico(idContainer, elementoCheckbox) {
+    const box = document.getElementById(idContainer);
+    if(elementoCheckbox.checked) box.classList.add('ativo');
+    else box.classList.remove('ativo');
+}
+
+function alternarEstadoFiltro() {
+    isFiltroAtivo = !isFiltroAtivo;
+    const btn = document.getElementById('btnFiltro');
+    if (isFiltroAtivo) {
+        btn.innerText = "Filtro: LIGADO";
+        btn.style.background = "#27ae60";
+    } else {
+        btn.innerText = "Filtro: DESLIGADO";
+        btn.style.background = "#d35400";
+    }
+    atualizarSimulacaoAmostragem();
+}
+
+// ============================================================================
+// NÚCLEO MATEMÁTICO: PROCESSAMENTO DE SINAIS
+// ============================================================================
+
+/**
+ * Reconstrói o sinal analógico em um instante 't' somando seus componentes harmônicos.
+ * Executa a síntese da Série de Fourier: x(t) = Sum( c_n * e^(j*2*pi*n*t) )
+ */
+const calcularSinalPeloEspectro = (t) => {
+    let somaComplexa = math.complex(0, 0);
+    const N = LIMITE_HARMONICOS_FOURIER;
+    
+    for (let n = -N; n <= N; n++) {
+        let angulo = 2 * Math.PI * n * t;
+        // Expansão de Euler: e^(j*w*t) = cos(w*t) + j*sin(w*t)
+        let termoExponencial = math.complex(Math.cos(angulo), Math.sin(angulo));
+        // Array deslocado de 0 a 2N para evitar índices negativos
+        let produto = math.multiply(coeficientesFourier[n + N], termoExponencial);
+        somaComplexa = math.add(somaComplexa, produto);
+    }
+    return somaComplexa.re; // Retorna apenas a parte real (o sinal físico observável)
+};
+
+/**
+ * Recupera o valor do espectro contínuo X(f) para uma frequência inteira f específica.
+ */
+function obterEspectroComplexo(f) {
+    const n = Math.round(f);
+    const N = LIMITE_HARMONICOS_FOURIER;
+    if (n < -N || n > N) return math.complex(0, 0); // Frequências além do limite calculado são zero
+    return coeficientesFourier[n + N];
+}
+
+/**
+ * Lê a equação string fornecida pelo usuário, calcula sua Integral de Fourier 
+ * e estima numericamente a largura de banda essencial (B) do sinal.
+ */
+function analisarEGerarFourier() {
+    const equacaoTexto = document.getElementById('inputEq').value;
+    try {
+        const nodoExpressao = math.parse(equacaoTexto);
+        const codigoCompilado = nodoExpressao.compile();
+        const N = LIMITE_HARMONICOS_FOURIER;
+        
+        // Inicializa o vetor de espectro com zeros complexos
+        coeficientesFourier = Array(2 * N + 1).fill(null).map(() => math.complex(0, 0));
+        
+        // Integração numérica via Método dos Retângulos (Soma de Riemann) no período T = 1s
+        const passosIntegracao = 1000;
+        const passoTempoDt = 1 / passosIntegracao;
+        
+        for (let i = 0; i < passosIntegracao; i++) {
+            let t = i * passoTempoDt; 
+            let amplitudeSinal = codigoCompilado.evaluate({ t: t }); // Avalia x(t)
+            
+            for (let n = -N; n <= N; n++) {
+                let angulo = -2 * Math.PI * n * t;
+                // Euler para a exponencial negativa: e^(-j*w*t)
+                let termoExponencial = math.complex(Math.cos(angulo), Math.sin(angulo));
+                // Área infinitesimal do retângulo: x(t) * dt * e^(-j*w*t)
+                let termoContribuicaoInfinitesimal = math.multiply(amplitudeSinal * passoTempoDt, termoExponencial);
+                
+                // Acumula o valor na frequência n correspondente
+                coeficientesFourier[n + N] = math.add(coeficientesFourier[n + N], termoContribuicaoInfinitesimal);
+            }
+        }
+        
+        // Algoritmo de varredura para detectar a Largura de Banda Real (B)
+        // Procura a maior frequência cujos harmônicos carregam energia relevante (> 0.001 de magnitude)
+        let bandaDetectada = 1;
+        for (let n = N; n >= 1; n--) {
+            if (math.abs(coeficientesFourier[n + N]) > 0.001) { 
+                bandaDetectada = n; 
+                break; 
+            }
+        }
+        larguraBandaSinalB = bandaDetectada;
+        document.getElementById('bandaReal').innerText = larguraBandaSinalB;
+        
+        // Destrói os gráficos antigos para renderizar o novo sinal do zero
+        for (let id in instanciasGraficos) { 
+            instanciasGraficos[id].destroy(); 
+            delete instanciasGraficos[id]; 
+        }
+        atualizarSimulacaoAmostragem();
+    } catch (e) { 
+        alert("Erro na sintaxe da equação!"); 
+    }
+}
+
+/**
+ * Reconstrói o sinal de tempo contínuo a partir das amostras discretas colhidas.
+ * Suporta dois modos: Interpolação Sinc (Filtro Ativo) ou Somatório de Espectro Replicado (Filtro Desativado).
+ */
+function calcularCurvaReconstrucao(amostrasColetadas, periodoAmostragemT, duracaoTotal, dadosEspectroAmostradoComplex, frequenciaAmostragemFs) {
+    const pontosReconstruidos = [];
+    
+    if (isFiltroAtivo) {
+        // MODO A: Reconstrução Ideal de Whittaker-Shannon (Interpolação por Função Sinc)
+        // x_rec(t) = Sum( x[n] * sinc( (t - n*T) / T ) )
+        for (let i = 0; i <= RESOLUCAO_PONTOS_TEMPO; i++) {
+            let t = (i / RESOLUCAO_PONTOS_TEMPO) * duracaoTotal;
+            let amplitudeReconstruida = 0;
+            
+            for (let n = 0; n < amostrasColetadas.length; n++) {
+                let argumentoSinc = (t - amostrasColetadas[n].t) / periodoAmostragemT;
+                // Definição matemática do Sinc: sin(pi * x) / (pi * x)
+                let valorSinc = (argumentoSinc === 0) ? 1 : Math.sin(Math.PI * argumentoSinc) / (Math.PI * argumentoSinc);
+                amplitudeReconstruida += amostrasColetadas[n].v * valorSinc;
+            }
+            pontosReconstruidos.push({ x: t, y: amplitudeReconstruida });
+        }
+    } else {
+        // MODO B: Filtro Desativado.
+        // O sinal de saída vira uma soma de infinitas frequências replicadas geradas pelo chaveamento físico das amostras.
+        for (let i = 0; i <= RESOLUCAO_PONTOS_TEMPO; i++) {
+            let t = (i / RESOLUCAO_PONTOS_TEMPO) * duracaoTotal;
+            let somatorioEspectralComplexo = math.complex(0, 0);
+            
+            for (let j = 0; j < dadosEspectroAmostradoComplex.length; j++) {
+                let f = dadosEspectroAmostradoComplex[j].x;
+                let valorXStarComplex = dadosEspectroAmostradoComplex[j].y; 
+                
+                let angulo = 2 * Math.PI * f * t;
+                let termoExponencial = math.complex(Math.cos(angulo), Math.sin(angulo));
+                somatorioEspectralComplexo = math.add(somatorioEspectralComplexo, math.multiply(valorXStarComplex, termoExponencial));
+            }
+            // Ajusta o ganho de escala dividindo por Fs
+            let sinalDistorcidoPeloEspectroInteiro = somatorioEspectralComplexo.re / frequenciaAmostragemFs;
+            pontosReconstruidos.push({ x: t, y: sinalDistorcidoPeloEspectroInteiro });
+        }
+    }
+    return pontosReconstruidos;
+}
+
+/**
+ * Recalcula as amostras no tempo e as réplicas no espectro com base na Frequência de Amostragem (Fs) escolhida.
+ */
+function atualizarSimulacaoAmostragem() {
+    const frequenciaAmostragemFs = parseFloat(document.getElementById('sliderFs').value);
+    document.getElementById('displayFs').innerText = frequenciaAmostragemFs;
+    
+    const elementoStatus = document.getElementById('statusNyquist');
+    const elementoPainel = document.getElementById('painelSlider');
+    
+    // Critério de Nyquist: Fs deve ser estritamente maior que 2 * B
+    if (frequenciaAmostragemFs > 2 * larguraBandaSinalB) {
+        elementoStatus.innerHTML = "✅ Nyquist OK (Sem Aliasing)"; 
+        elementoPainel.style.background = "#1a73e8";
+    } else {
+        elementoStatus.innerHTML = "⚠️ Aliasing (Superposição Espectral)"; 
+        elementoPainel.style.background = "#d93025";
+    }
+
+    const periodoAmostragemT = 1 / frequenciaAmostragemFs;
+    const duracaoJanelaTempo = 1.0;
+    
+    const dadosSinalOriginal = [];
+    const dadosSinalAmostrado = [];
+    const amostrasColetadas = [];
+
+    // 1. Processamento no Domínio do Tempo
+    for (let n = 0; n <= duracaoJanelaTempo * frequenciaAmostragemFs; n++) {
+        let instanteTn = n * periodoAmostragemT; 
+        let amplitudeAmostraVn = calcularSinalPeloEspectro(instanteTn);
+        amostrasColetadas.push({ t: instanteTn, v: amplitudeAmostraVn }); 
+        dadosSinalAmostrado.push({ x: instanteTn, y: amplitudeAmostraVn });
+    }
+    
+    for (let i = 0; i <= RESOLUCAO_PONTOS_TEMPO; i++) {
+        let t = (i / RESOLUCAO_PONTOS_TEMPO) * duracaoJanelaTempo;
+        dadosSinalOriginal.push({ x: t, y: calcularSinalPeloEspectro(t) });
+    }
+
+    // 2. Processamento no Domínio da Frequência (Replicação Periódica do Espectro)
+    const dadosEspectroOriginalMagnitude = [];
+    const dadosEspectroAmostradoComplex = [];
+    const dadosEspectroAmostradoMagnitude = [];
+    
+    // Determina o número de réplicas matemáticas necessárias para cobrir o gráfico visualizado
+    const numeroReplicasEspectrais = Math.ceil((LIMITE_VISUALIZACAO_FREQ + LIMITE_HARMONICOS_FOURIER) / frequenciaAmostragemFs);
+    let magnitudeMaximaEncontrada = 0;
+    
+    for (let f = -LIMITE_VISUALIZACAO_FREQ; f <= LIMITE_VISUALIZACAO_FREQ; f += 1) {
+        let XfComplexoOriginal = obterEspectroComplexo(f);
+        dadosEspectroOriginalMagnitude.push({ x: f, y: math.abs(XfComplexoOriginal) }); 
+        
+        // Soma matemática do Espectro Periódico Replicado: X*(f) = Fs * Sum( X(f - k*Fs) )
+        let somaContribuicaoReplicas = math.complex(0, 0);
+        for (let k = -numeroReplicasEspectrais; k <= numeroReplicasEspectrais; k++) { 
+            somaContribuicaoReplicas = math.add(somaContribuicaoReplicas, obterEspectroComplexo(f - k * frequenciaAmostragemFs)); 
+        }
+        
+        let valorEspectroDiscretoComplex = math.multiply(frequenciaAmostragemFs, somaContribuicaoReplicas);
+        dadosEspectroAmostradoComplex.push({ x: f, y: valorEspectroDiscretoComplex }); 
+        
+        let magnitudeReplicada = math.abs(valorEspectroDiscretoComplex); 
+        dadosEspectroAmostradoMagnitude.push({ x: f, y: magnitudeReplicada }); 
+        if (magnitudeReplicada > magnitudeMaximaEncontrada) magnitudeMaximaEncontrada = magnitudeReplicada;
+    }
+
+    // 3. Reconstrução de Saída
+    const dadosSinalReconstruido = calcularCurvaReconstrucao(amostrasColetadas, periodoAmostragemT, duracaoJanelaTempo, dadosEspectroAmostradoComplex, frequenciaAmostragemFs);
+
+    // 4. Configuração das Coordenadas Gráficas do Filtro Passa-Baixas Baseado em Fs/2
+    const frequenciaNyquist = frequenciaAmostragemFs / 2;
+    const alturaGraficoFiltro = Math.max(magnitudeMaximaEncontrada * 1.1, 2);
+    
+    // Desenha o pulso retangular ideal entre -Fs/2 e +Fs/2
+    const dadosCurvaFiltro = isFiltroAtivo 
+        ? [{x: -frequenciaNyquist, y: 0}, {x: -frequenciaNyquist, y: alturaGraficoFiltro}, {x: frequenciaNyquist, y: alturaGraficoFiltro}, {x: frequenciaNyquist, y: 0}]
+        : [{x: -frequenciaNyquist, y: 0}, {x: -frequenciaNyquist, y: 0}, {x: frequenciaNyquist, y: 0}, {x: frequenciaNyquist, y: 0}];
+
+    // 5. Envio dos Novos Lotes de Dados para Renderização Final
+    renderizarGraficoLinhaTempo('canvasOriginal', 'x(t)', dadosSinalOriginal, '#2c3e50');
+    renderizarGraficoHastesBarra('canvasAmostrado', 'x[n]', dadosSinalAmostrado, '#e74c3c');
+    renderizarGraficoLinhaTempo('canvasReconstruido', 'x_rec(t)', dadosSinalReconstruido, '#2980b9');
+    renderizarGraficoHastesBarra('canvasEspectroOrig', '|X(f)|', dadosEspectroOriginalMagnitude, '#34495e');
+    renderizarEspectroConjuntoComFiltro('canvasEspectroAmostra', dadosEspectroAmostradoMagnitude, dadosCurvaFiltro, '#2980b9');
+}
+
+// ============================================================================
+// MOTOR DE RENDERIZAÇÃO GRÁFICA (CHART.JS)
+// ============================================================================
+function renderizarGraficoLinhaTempo(idCanvas, rotuloDataset, vetorDados, corLinha) {
+    if (instanciasGraficos[idCanvas]) { 
+        instanciasGraficos[idCanvas].data.datasets[0].data = vetorDados; 
+        instanciasGraficos[idCanvas].update('none'); 
+        return; 
+    }
+    instanciasGraficos[idCanvas] = new Chart(document.getElementById(idCanvas).getContext('2d'), {
+        type: 'scatter',
+        data: { datasets: [{ label: rotuloDataset, data: vetorDados, borderColor: corLinha, showLine: true, pointRadius: 0, fill: false, borderWidth: 1.5 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { type: 'linear', min: 0, max: 1 }, y: { min: -2.5, max: 2.5 } } }
+    });
+}
+
+function renderizarGraficoHastesBarra(idCanvas, rotuloDataset, vetorDados, corBarras) {
+    if (instanciasGraficos[idCanvas]) { 
+        instanciasGraficos[idCanvas].data.datasets[0].data = vetorDados; 
+        instanciasGraficos[idCanvas].update('none'); 
+        return; 
+    }
+    instanciasGraficos[idCanvas] = new Chart(document.getElementById(idCanvas).getContext('2d'), {
+        type: 'bar',
+        data: { datasets: [{ label: rotuloDataset, data: vetorDados, backgroundColor: corBarras, barThickness: 1.5 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { type: 'linear', min: idCanvas.includes('Espectro') ? -LIMITE_VISUALIZACAO_FREQ : 0, max: idCanvas.includes('Espectro') ? LIMITE_VISUALIZACAO_FREQ : 1 } } }
+    });
+}
+
+function renderizarEspectroConjuntoComFiltro(idCanvas, vetorDadosAmostra, vetorDadosFiltro, corEspectro) {
+    if (instanciasGraficos[idCanvas]) { 
+        instanciasGraficos[idCanvas].data.datasets[0].data = vetorDadosFiltro; 
+        instanciasGraficos[idCanvas].data.datasets[1].data = vetorDadosAmostra; 
+        instanciasGraficos[idCanvas].update('none'); 
+        return; 
+    }
+    instanciasGraficos[idCanvas] = new Chart(document.getElementById(idCanvas).getContext('2d'), {
+        data: {
+            datasets: [
+                { type: 'line', label: 'Filtro H(f)', data: vetorDadosFiltro, borderColor: 'rgba(39, 174, 96, 0.4)', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, pointRadius: 0, order: 1 },
+                { type: 'bar', label: '|X*(f)|', data: vetorDadosAmostra, backgroundColor: corEspectro, barThickness: 1.5, order: 2 }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { type: 'linear', min: -LIMITE_VISUALIZACAO_FREQ, max: LIMITE_VISUALIZACAO_FREQ } } }
+    });
+}
+
+// Inicialização imediata ao abrir a página
+window.onload = analisarEGerarFourier;
+</script>
+</body>
+</html>
