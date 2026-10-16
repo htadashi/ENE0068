@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Leaky bucket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f8f8f8; --ink:#141414; --muted:#8a8a8a; --faint:#d6d6d6; --row:#f1f1f1;
+  --green:#2f9e5b; --greenbg:#eef7f1; --greenline:#bfe0cb;
+  --red:#d6334f; --redbg:#fbeef0; --redline:#f0c3cb;
+  --orange:#e8794a; --blue:#4a7fd6; --purple:#9a5bd0; --teal:#1f9aa0;
+  color-scheme:light;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#151515; --ink:#ececec; --muted:#8f8f8f; --faint:#3a3a3a; --row:#1e1e1e;
+  --green:#4cc27d; --greenbg:#17261d; --greenline:#2c5a3d;
+  --red:#ff5d78; --redbg:#2c171b; --redline:#6a2a36;
+  --orange:#f59466; --blue:#7aa4ef; --purple:#c08bff; --teal:#4cc6cc; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#151515; --ink:#ececec; --muted:#8f8f8f; --faint:#3a3a3a; --row:#1e1e1e;
+  --green:#4cc27d; --greenbg:#17261d; --greenline:#2c5a3d;
+  --red:#ff5d78; --redbg:#2c171b; --redline:#6a2a36;
+  --orange:#f59466; --blue:#7aa4ef; --purple:#c08bff; --teal:#4cc6cc; color-scheme:dark;}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px}
+.wrap{max-width:1000px;margin:0 auto;padding:28px clamp(14px,3vw,28px) 40px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:26px}
+.top h1{font-size:13px;font-weight:700;margin:0;letter-spacing:.06em}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--ink);background:transparent;border:1.5px solid var(--ink);padding:7px 12px;cursor:pointer}
+button:hover{background:var(--ink);color:var(--bg)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:40px;align-items:start}
+.feed{position:relative;height:262px;overflow:hidden}
+.q{position:absolute;left:0;right:0;height:42px;pointer-events:none;display:grid;grid-template-columns:minmax(0,1fr) 110px;align-items:center;gap:12px;
+   transition:top .55s cubic-bezier(.3,.7,.3,1),opacity .55s}
+.q .sql{height:100%;display:block;line-height:39px;padding:0 14px;border:1.5px solid var(--faint);background:var(--row);color:var(--muted);
+   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .3s,border-color .3s,color .3s}
+.q .sql span.t{transition:color .3s}
+.q .st{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
+.q.admitted .sql{background:var(--greenbg);border-color:var(--greenline)}
+.q.admitted .st{color:var(--green)}
+.q.blocked .sql{background:var(--redbg);border-color:var(--redline);text-decoration:line-through}
+.q.blocked .st{color:var(--red)}
+.q.head .sql{border-color:var(--ink);color:var(--ink);font-weight:500}
+.q.head .st{color:var(--ink)}
+
+.side{display:flex;flex-direction:column;align-items:center}
+.counts{font-size:12px;font-weight:700;letter-spacing:.06em;display:flex;gap:18px;margin-bottom:10px;flex-wrap:wrap;justify-content:center}
+.counts .a{color:var(--green)} .counts .b{color:var(--red)} .counts .w{color:var(--muted)}
+.side svg{width:100%;max-width:230px;height:auto;overflow:visible}
+.drop{animation:fall .8s ease-in forwards;transform-box:fill-box}
+@keyframes fall{from{transform:translateY(0);opacity:1}to{transform:translateY(46px);opacity:0}}
+.spill{animation:spill .9s ease-in forwards;transform-box:fill-box}
+@keyframes spill{from{transform:translate(0,0);opacity:1}to{transform:translate(18px,70px);opacity:0}}
+.lvl{font-size:12px;color:var(--muted);margin-top:6px}
+
+.eq{margin:30px 0 0;font-size:13px;color:var(--muted);white-space:nowrap;overflow-x:auto;padding-bottom:4px}
+.eq b{color:var(--ink);font-weight:700}
+.hist{margin-top:14px}
+.hist canvas{display:block;width:100%;height:84px}
+.hist .lbl{font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:4px}
+
+.sliders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 34px;margin-top:30px}
+.sl{display:flex;align-items:center;gap:12px}
+.sl label{font-size:12px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+.sl output{font-size:12px;font-weight:700;min-width:2.5em;text-align:right}
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;flex:1;min-width:60px;height:34px;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:repeating-linear-gradient(90deg,var(--muted) 0 6px,transparent 6px 10px)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:30px;background:var(--ink);border:0;border-radius:0;margin-top:-14px}
+input[type=range]::-moz-range-track{height:2px;background:repeating-linear-gradient(90deg,var(--muted) 0 6px,transparent 6px 10px)}
+input[type=range]::-moz-range-thumb{width:16px;height:30px;background:var(--ink);border:0;border-radius:0}
+
+.credit{margin-top:40px;padding-top:14px;border-top:1px dashed var(--faint);font-size:12px;color:var(--muted)}
+.credit a{color:var(--ink)}
+@media (max-width:760px){
+  .main{grid-template-columns:1fr;gap:26px}
+  .side{order:-1}
+  .sliders{grid-template-columns:1fr}
+  .q{grid-template-columns:minmax(0,1fr) 92px}
+}
+@media (prefers-reduced-motion:reduce){.q{transition:none}.drop,.spill{animation-duration:.01s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>LEAKY BUCKET</h1>
+    <div class="btns">
+      <button id="play" type="button">PAUSAR</button>
+      <button id="step" type="button">PASSO</button>
+      <button id="burst" type="button">RAJADA +6</button>
+      <button id="reset" type="button">REINICIAR</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="feed" id="feed" aria-live="off"></div>
+    <div class="side">
+      <div class="counts"><span class="a" id="cA">0 ADMITIDAS</span><span class="w" id="cQ">0 NA FILA</span><span class="b" id="cB">0 BLOQUEADAS</span></div>
+      <svg viewBox="0 0 200 270" id="bk" role="img" aria-label="Balde com o nível da fila">
+        <defs>
+          <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="6" height="6" style="fill:var(--greenbg)"/><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--green);stroke-width:2;opacity:.55"/>
+          </pattern>
+        </defs>
+        <g id="units"></g>
+        <rect id="fill" x="22" y="220" width="156" height="0" fill="url(#hatch)"/>
+        <line id="surf" x1="22" x2="178" y1="220" y2="220" style="stroke:var(--green);stroke-width:2"/>
+        <path d="M10 12 H20 V222 H180 V12 H190" style="fill:none;stroke:var(--ink);stroke-width:2.5"/>
+        <g id="drops"></g>
+      </svg>
+      <div class="lvl" id="lvl"></div>
+    </div>
+  </div>
+
+  <div class="eq" id="eq"></div>
+  <div class="hist"><div class="lbl">y[n] NOS ÚLTIMOS INSTANTES</div><canvas id="cv"></canvas></div>
+
+  <div class="sliders">
+    <div class="sl"><label for="sC">CAPACIDADE C</label><input type="range" id="sC" min="1" max="12" step="1" value="6"><output id="oC"></output></div>
+    <div class="sl"><label for="sR">VAZÃO R</label><input type="range" id="sR" min="0" max="4" step="1" value="1"><output id="oR"></output></div>
+    <div class="sl"><label for="sL">CHEGADAS λ</label><input type="range" id="sL" min="0" max="4" step="0.2" value="1.2"><output id="oL"></output></div>
+  </div>
+  <footer class="credit">Baseado em <a href="https://planetscale.com/blog/leaky-buckets-in-software-explained" target="_blank" rel="noopener">Leaky buckets in software, explained</a> (PlanetScale).</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const rint=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const TABLE={orders:'--orange',users:'--blue',products:'--green',payments:'--purple',sessions:'--teal'};
+const TPL=[
+  ()=>['SELECT * FROM ','orders',' WHERE id = '+rint(1,99)],
+  ()=>['SELECT name FROM ','users',' LIMIT '+[10,20,50][rint(0,2)]],
+  ()=>['UPDATE ','products',' SET stock = stock - 1'],
+  ()=>['SELECT * FROM ','orders',' ORDER BY id DESC'],
+  ()=>['UPDATE ','orders'," SET status = 'paid'"],
+  ()=>['INSERT INTO ','payments',' VALUES ('+rint(100,999)+', 49.90)'],
+  ()=>['DELETE FROM ','sessions',' WHERE expired = true'],
+  ()=>['SELECT count(*) FROM ','users',''],
+  ()=>['SELECT * FROM ','products',' WHERE price < '+rint(10,90)],
+];
+const LABEL={queued:'NA FILA',admitted:'ADMITIDA',blocked:'BLOQUEADA'};
+
+let items,queue,n,hist,cA,cB,last,nextId,extra=0;
+function reset(){items=[];queue=[];n=-1;hist=[];cA=0;cB=0;last=null;nextId=0;extra=0;
+  $('#feed').innerHTML='';els.clear();}
+const els=new Map();
+function poisson(l){if(l<=0)return 0;const L=Math.exp(-l);let k=0,p=1;do{k++;p*=Math.random()}while(p>L);return k-1;}
+const P={get C(){return +$('#sC').value},get R(){return +$('#sR').value},get L(){return +$('#sL').value}};
+
+/* um instante: y[n] = min(C, max(0, y[n-1] + x[n] - R)) */
+function step(){
+  const C=P.C,R=P.R, yPrev=queue.length;
+  const x=Math.min(12,poisson(P.L)+extra); extra=0;
+  n++;
+  for(let i=0;i<x;i++){const it={id:nextId++,parts:TPL[rint(0,TPL.length-1)](),status:'queued'};items.push(it);queue.push(it);}
+  const s=Math.min(R,queue.length);
+  for(let i=0;i<s;i++){queue.shift().status='admitted';}
+  let l=0; while(queue.length>C){queue.pop().status='blocked';l++;}
+  cA+=s;cB+=l;
+  const y=queue.length;
+  last={n,yPrev,x,R,C,y,s,l};
+  hist.push({y,l,C}); if(hist.length>60)hist.shift();
+  if(items.length>300){const cut=items.length-300;items.splice(0,cut);}
+  render(s,l);
+}
+
+/* lista de queries centrada na próxima da fila */
+function render(s,l){
+  const feed=$('#feed');
+  const headIdx=queue.length?items.indexOf(queue[0]):items.length;
+  const keep=new Set();
+  items.forEach((it,i)=>{
+    const pos=i-headIdx; if(Math.abs(pos)>3) return;
+    keep.add(it.id);
+    let el=els.get(it.id), fresh=false;
+    if(!el){
+      el=document.createElement('div');el.className='q';
+      const [a,t,b]=it.parts;
+      el.innerHTML=`<div class="sql">${a}<span class="t" style="color:var(${TABLE[t]})">${t}</span>${b}</div><div class="st"></div>`;
+      el.style.top=(5*52)+'px';el.style.opacity=0;feed.appendChild(el);els.set(it.id,el);fresh=true;
+    }
+    el.className='q '+it.status+(pos===0&&it.status==='queued'?' head':'');
+    el.querySelector('.st').textContent=LABEL[it.status];
+    const top=(pos+2)*52, op=Math.abs(pos)>2?0:[1,.55,.3][Math.abs(pos)];
+    const apply=()=>{el.style.top=top+'px';el.style.opacity=op;};
+    fresh?requestAnimationFrame(()=>requestAnimationFrame(apply)):apply();
+  });
+  els.forEach((el,id)=>{if(!keep.has(id)){el.style.opacity=0;setTimeout(()=>{if(!keep.has(id)&&el.parentNode){el.remove();els.delete(id);}},600);}});
+  if(!items.length) feed.innerHTML='<div class="q" style="top:104px"><div class="sql">aguardando requisições…</div><div class="st"></div></div>';
+  else{const ph=feed.querySelector('.q:not([class*=" "])');if(ph&&!ph.querySelector('.t'))ph.remove();}
+  renderBucket(s||0,l||0);renderText();renderHist();
+}
+
+let level=0,anim=null;
+function renderBucket(s,l){
+  const C=P.C,y=queue.length, H=208, base=220;
+  const target=Math.min(1,y/C)*H;
+  const from=level,t0=performance.now();
+  cancelAnimationFrame(anim);
+  const go=t=>{const k=Math.min(1,(t-t0)/450),e=1-Math.pow(1-k,3);level=from+(target-from)*e;
+    $('#fill').setAttribute('y',base-level);$('#fill').setAttribute('height',level);
+    $('#surf').setAttribute('y1',base-level);$('#surf').setAttribute('y2',base-level);
+    $('#surf').style.opacity=level>0.5?1:0;
+    if(k<1)anim=requestAnimationFrame(go);};
+  anim=requestAnimationFrame(go);
+  // marcas de unidade
+  let u='';for(let i=1;i<C;i++){const yy=base-H*i/C;u+=`<line x1="22" x2="178" y1="${yy}" y2="${yy}" style="stroke:var(--faint);stroke-dasharray:3 4"/>`;}
+  $('#units').innerHTML=u;
+  // gotas: processadas saem pelo fundo, bloqueadas transbordam
+  const g=$('#drops');
+  for(let i=0;i<s;i++){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',100);c.setAttribute('cy',232);c.setAttribute('r',3);c.setAttribute('class','drop');
+    c.style.fill='var(--green)';c.style.animationDelay=(i*140)+'ms';c.style.opacity=0;g.appendChild(c);setTimeout(()=>c.remove(),1000+i*140);}
+  for(let i=0;i<l;i++){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',186);c.setAttribute('cy',8);c.setAttribute('r',3);c.setAttribute('class','spill');
+    c.style.fill='var(--red)';c.style.animationDelay=(i*110)+'ms';c.style.opacity=0;g.appendChild(c);setTimeout(()=>c.remove(),1100+i*110);}
+  $('#lvl').textContent=`y[n] = ${y}   C = ${C}`;
+}
+function renderText(){
+  $('#cA').textContent=cA+(cA===1?' ADMITIDA':' ADMITIDAS');
+  $('#cQ').textContent=queue.length+' NA FILA';
+  $('#cB').textContent=cB+(cB===1?' BLOQUEADA':' BLOQUEADAS');
+  $('#oC').textContent=P.C;$('#oR').textContent=P.R;$('#oL').textContent=P.L.toFixed(1);
+  if(!last){$('#eq').innerHTML='y[n] = min(C, max(0, y[n−1] + x[n] − R))';return;}
+  const L=last,v=L.yPrev+L.x-L.R;
+  $('#eq').innerHTML=`n = <b>${L.n}</b>   y[n] = min(C, max(0, y[n−1] + x[n] − R)) = min(${L.C}, max(0, ${L.yPrev} + <b>${L.x}</b> − ${L.R})) = min(${L.C}, ${Math.max(0,v)}) = <b>${L.y}</b>`;
+}
+function renderHist(){
+  const cv=$('#cv'),dpr=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W)return;
+  cv.width=W*dpr;cv.height=H*dpr;const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+  const N=Math.max(20,Math.min(60,Math.floor(W/14))), data=hist.slice(-N), cw=W/N;
+  const top=Math.max(12,...data.map(d=>d.C)), Y=v=>H-6-(H-14)*v/top;
+  g.strokeStyle=css('--faint');g.lineWidth=1;g.beginPath();g.moveTo(0,Y(0)+.5);g.lineTo(W,Y(0)+.5);g.stroke();
+  // linha tracejada de C (valor atual)
+  g.setLineDash([5,4]);g.strokeStyle=css('--muted');g.beginPath();g.moveTo(0,Y(P.C));g.lineTo(W,Y(P.C));g.stroke();g.setLineDash([]);
+  g.fillStyle=css('--muted');g.font='11px "JetBrains Mono", monospace';g.textAlign='right';g.fillText('C',W-2,Y(P.C)-3);
+  const off=N-data.length;
+  data.forEach((d,i)=>{const x=(i+off+.5)*cw;
+    g.strokeStyle=css('--green');g.lineWidth=1.5;g.beginPath();g.moveTo(x,Y(0));g.lineTo(x,Y(d.y));g.stroke();
+    g.fillStyle=css('--green');g.beginPath();g.arc(x,Y(d.y),2.6,0,7);g.fill();
+    if(d.l>0){g.fillStyle=css('--red');g.fillRect(x-3,2,6,6);}
+  });
+}
+
+/* controles */
+let timer=null,playing=true;
+const loop=()=>{step();timer=setTimeout(loop,1000);};
+$('#play').onclick=()=>{playing=!playing;$('#play').textContent=playing?'PAUSAR':'CONTINUAR';clearTimeout(timer);if(playing)timer=setTimeout(loop,300);};
+$('#step').onclick=()=>{if(playing)$('#play').click();step();};
+$('#burst').onclick=()=>{extra+=6;if(!playing)step();};
+$('#reset').onclick=()=>{reset();level=0;render(0,0);};
+['#sC','#sR','#sL'].forEach(id=>$(id).addEventListener('input',()=>{renderText();renderBucket(0,0);renderHist();}));
+addEventListener('resize',renderHist);
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',renderHist);}catch(e){}
+if(document.fonts)document.fonts.ready.then(renderHist);
+
+reset();render(0,0);timer=setTimeout(loop,600);
+})();
+</script>
+</body>
+</html>
