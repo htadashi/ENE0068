@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Por que a frequência digital vai de 0 a π</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,ital,wght@6..72,0,400;6..72,0,500;6..72,1,400&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+  --paper:#EEF2F5; --surface:#FFFFFF; --ink:#16233B; --muted:#56667D;
+  --grid:#D4DCE5; --faint:#98A6B8; --signal:#1F5FD1; --alias:#B8306F; --band:#DCE7F8;
+  --serif:"Newsreader", Georgia, "Times New Roman", serif;
+  --sans:"Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#0E1522; --surface:#152030; --ink:#E4ECF6; --muted:#9AAAC0;
+    --grid:#2A394D; --faint:#5F7088; --signal:#78A9FF; --alias:#F283BA; --band:#1C2F50;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#0E1522; --surface:#152030; --ink:#E4ECF6; --muted:#9AAAC0;
+  --grid:#2A394D; --faint:#5F7088; --signal:#78A9FF; --alias:#F283BA; --band:#1C2F50;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5}
+main{max-width:1120px;margin:0 auto;padding:36px 20px 56px}
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(1.9rem,4.6vw,3rem);line-height:1.08;letter-spacing:-0.012em;margin:0 0 .35em;max-width:20ch}
+.intro{font-family:var(--serif);font-size:1.15rem;line-height:1.6;color:var(--muted);max-width:60ch;margin:0 0 18px}
+.identity{font-family:var(--serif);font-size:clamp(1.05rem,2.4vw,1.35rem);margin:0 0 28px;display:flex;flex-wrap:wrap;gap:6px 36px}
+.identity span{white-space:nowrap}
+i{font-style:italic}
+.panel{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:18px}
+h2{font-family:var(--serif);font-weight:500;font-size:1.25rem;margin:0 0 4px}
+.note{color:var(--muted);font-size:.92rem;margin:6px 0 0;max-width:70ch}
+
+/* controls */
+.controls{margin-bottom:16px}
+.omega-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.omega-row label{font-weight:500}
+#wOut{font-family:var(--serif);font-size:clamp(1.8rem,4vw,2.4rem);color:var(--signal);line-height:1}
+input[type=range]{width:100%;margin:14px 0 2px;accent-color:var(--signal);height:28px}
+.scale{display:flex;justify-content:space-between;font-family:var(--serif);color:var(--muted);font-size:.95rem;padding:0 4px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+.row .lead{color:var(--muted);font-size:.9rem;margin-right:4px}
+button,.chip{font:500 .9rem var(--sans);color:var(--ink);background:var(--surface);border:1px solid var(--grid);border-radius:999px;padding:.38em .85em;cursor:pointer}
+button:hover{border-color:var(--faint)}
+button[aria-pressed="true"]{background:var(--band);border-color:var(--signal);color:var(--ink)}
+.preset{font-family:var(--serif);font-size:1rem;padding:.2em .75em}
+.seg{display:inline-flex;border:1px solid var(--grid);border-radius:999px;overflow:hidden}
+.seg button{border:0;border-radius:0}
+.seg button+button{border-left:1px solid var(--grid)}
+#play{background:var(--signal);color:var(--surface);border-color:var(--signal)}
+#play[aria-pressed="true"]{background:var(--surface);color:var(--signal)}
+label.check{display:inline-flex;gap:6px;align-items:center;font-size:.9rem;cursor:pointer}
+label.check input{accent-color:var(--signal);width:16px;height:16px}
+.fs{display:inline-flex;gap:6px;align-items:center;font-size:.9rem}
+.fs input{font:inherit;width:7.5em;padding:.3em .5em;border:1px solid var(--grid);border-radius:6px;background:var(--surface);color:var(--ink)}
+.err{color:var(--alias);font-size:.85rem}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+/* plots */
+canvas{display:block;width:100%}
+#cTime{height:270px;margin-top:10px}
+#cCircle{aspect-ratio:1/1;max-width:420px;margin:8px auto 0}
+#cFreq{height:200px;margin-top:10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem;color:var(--muted);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:22px;height:0;border-top:2px solid}
+.sw.dot{width:9px;height:9px;border:0;border-radius:50%;background:var(--signal)}
+.sw.sq{width:9px;height:9px;border:2px solid var(--signal);background:transparent}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.55fr);gap:16px;margin-top:16px}
+.stack{display:grid;gap:16px;align-content:start}
+.readout{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
+.readout .k{color:var(--muted);font-size:.88rem}
+.readout .v{font-family:var(--serif);font-size:clamp(1.6rem,3.4vw,2.1rem);line-height:1.1}
+#vOmega{color:var(--signal)} #vAlias{color:var(--alias)}
+#explain{font-family:var(--serif);font-size:1.08rem;line-height:1.55;margin:14px 0 0}
+#hz{color:var(--muted);font-size:.92rem;margin:8px 0 0}
+.try{margin-top:16px}
+.try ul{margin:8px 0 0;padding-left:1.2em;font-family:var(--serif);font-size:1.05rem;line-height:1.55;max-width:75ch}
+.try li{margin:4px 0}
+@media (max-width:820px){
+  .grid{grid-template-columns:1fr}
+  #cTime{height:230px}
+  .readout{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Porque a frequência digital vai de 0 a π</h1>
+  <p class="intro">As amostras só existem para <i>n</i> inteiro. Leve o controle deslizante além de π e observe os pontos: eles param de acelerar e começam a desacelerar, porque uma família inteira de senoides passa exatamente pelas mesmas amostras.</p>
+  <p class="identity" aria-label="Identidades principais">
+    <span><i>e</i><sup><i>j</i>(<i>ω</i> + 2π)<i>n</i></sup> = <i>e</i><sup><i>jωn</i></sup></span>
+    <span>cos((2π − <i>ω</i>)<i>n</i>) = cos(<i>ωn</i>)</span>
+  </p>
+
+  <section class="panel controls" aria-label="Controls">
+    <div class="omega-row">
+      <label for="w">Frequência digital do sinal, em radianos por amostra</label>
+      <output id="wOut" for="w">ω = π/4</output>
+    </div>
+    <input type="range" id="w" min="0" max="4" step="0.0025" value="0.25">
+    <div class="scale" aria-hidden="true"><span>0</span><span>π</span><span>2π</span><span>3π</span><span>4π</span></div>
+
+    <div class="row" id="presets">
+      <span class="lead">Ir para</span>
+    </div>
+
+    <div class="row">
+      <div class="seg" role="group" aria-label="Signal type">
+        <button type="button" id="mReal" aria-pressed="true">Cosseno real</button>
+        <button type="button" id="mCplx" aria-pressed="false">Exponencial complexa</button>
+      </div>
+      <button type="button" id="play" aria-pressed="false">Iniciar varredura</button>
+      <label class="check"><input type="checkbox" id="showCurves" checked> Curva original</label>
+      <label class="check"><input type="checkbox" id="showAlias" checked> Senoide mais lenta equivalente</label>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="hTime">
+    <h2 id="hTime">As amostras</h2>
+    <p class="note" id="timeNote">Os pontos são o que o computador armazena. A curva cinza é a senoide que foi amostrada; a curva tracejada é a senoide mais lenta que passa pelos mesmos pontos.</p>
+    <canvas id="cTime" role="img" aria-label="Gráfico no tempo das amostras e das senoides que passam por elas"></canvas>
+    <div class="legend" id="legTime"></div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  const PI = Math.PI, TAU = 2 * PI, N = 20, EPS = 1e-6;
+  const $ = id => document.getElementById(id);
+  const slider = $('w');
+  const state = { v: 0.25, mode: 'real', curves: true, alias: true, playing: false, fs: 8000 };
+  const W = () => state.v * PI;
+
+  function gcd(a, b){ a = Math.abs(a); b = Math.abs(b); while (b){ [a, b] = [b, a % b]; } return a; }
+  function fmtPi(x){
+    const v = x / PI;
+    if (Math.abs(v) < EPS) return '0';
+    for (const d of [1, 2, 3, 4, 6, 8]){
+      const k = Math.round(v * d);
+      if (Math.abs(v * d - k) < 1e-5){
+        const g = gcd(k, d), num = k / g, den = d / g, a = Math.abs(num);
+        return (num < 0 ? '−' : '') + (a === 1 ? '' : a) + 'π' + (den === 1 ? '' : '/' + den);
+      }
+    }
+    const s = Math.abs(v).toFixed(3).replace(/\.?0+$/, '');
+    return (v < 0 ? '−' : '') + s + 'π';
+  }
+  function fmtHz(f){
+    const a = Math.abs(f);
+    const s = a < 10 ? a.toFixed(2) : Math.round(a).toLocaleString('en-US');
+    return (f < -1e-9 ? '−' : '') + s + ' Hz';
+  }
+  function fsLabel(k){
+    if (k === 0) return '0';
+    const s = k < 0 ? '−' : '', a = Math.abs(k);
+    if (a % 2 === 0){ const m = a / 2; return s + (m === 1 ? '' : m) + 'fs'; }
+    return s + (a === 1 ? '' : a) + 'fs/2';
+  }
+  function principal(w){
+    if (state.mode === 'real'){
+      let m = ((w % TAU) + TAU) % TAU;
+      if (m > PI) m = TAU - m;
+      if (Math.abs(m - TAU) < EPS || Math.abs(m) < EPS) m = 0;
+      return m;
+    }
+    let m = (((w + PI) % TAU) + TAU) % TAU - PI;
+    if (Math.abs(m) < EPS) m = 0;
+    if (Math.abs(m - PI) < EPS) m = -PI;
+    return m;
+  }
+
+  /* presets */
+  const presets = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.25];
+  const presetWrap = $('presets');
+  const presetBtns = presets.map(p => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'preset'; b.textContent = fmtPi(p * PI);
+    b.setAttribute('aria-label', 'Definir ômega como ' + fmtPi(p * PI));
+    b.addEventListener('click', () => { stopPlay(); state.v = p; slider.value = p; render(); });
+    presetWrap.appendChild(b);
+    return { b, p };
+  });
+
+  /* colors */
+  let C = {};
+  function readColors(){
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ['ink','muted','grid','faint','signal','alias','band','surface'])
+      C[k] = cs.getPropertyValue('--' + k).trim();
+    C.sans = cs.getPropertyValue('--sans').trim();
+    C.serif = cs.getPropertyValue('--serif').trim();
+  }
+
+  function setup(c){
+    const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    c.width = Math.max(1, Math.round(r.width * dpr));
+    c.height = Math.max(1, Math.round(r.height * dpr));
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, r.width, r.height);
+    return { ctx, w: r.width, h: r.height };
+  }
+  function line(ctx, x0, y0, x1, y1){ ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  function arrow(ctx, x0, y0, x1, y1, color, width, dash){
+    ctx.save();
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width;
+    ctx.setLineDash(dash || []); line(ctx, x0, y0, x1, y1); ctx.setLineDash([]);
+    const a = Math.atan2(y1 - y0, x1 - x0), s = 9;
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - s * Math.cos(a - 0.42), y1 - s * Math.sin(a - 0.42));
+    ctx.lineTo(x1 - s * Math.cos(a + 0.42), y1 - s * Math.sin(a + 0.42));
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+
+  /* time plot */
+  function drawTime(){
+    const { ctx, w, h } = setup($('cTime'));
+    const omega = W(), m = principal(omega), cplx = state.mode === 'complex';
+    const L = 34, R = 18, T = 10, B = 28, pw = w - L - R, ph = h - T - B;
+    const X = t => L + t / N * pw, Y = v => T + (1 - v / 1.15) / 2 * ph;
+    ctx.font = `12px ${C.sans}`; ctx.lineWidth = 1;
+    ctx.strokeStyle = C.grid; ctx.fillStyle = C.muted;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const v of [-1, 0, 1]){ line(ctx, L, Y(v), L + pw, Y(v)); ctx.fillText(v === -1 ? '−1' : String(v), L - 8, Y(v)); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const every = pw / N < 26 ? 4 : 2;
+    for (let n = 0; n <= N; n++){
+      line(ctx, X(n), Y(0) - 3, X(n), Y(0) + 3);
+      if (n % every === 0) ctx.fillText(String(n), X(n), T + ph + 8);
+    }
+    ctx.textAlign = 'left'; ctx.fillText('n', L + pw + 6, T + ph + 8);
+
+    const steps = Math.max(900, Math.ceil(pw * 3));
+    function curve(fn, color, width, dash){
+      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash);
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++){ const t = i / steps * N, y = Y(fn(t)); i ? ctx.lineTo(X(t), y) : ctx.moveTo(X(t), y); }
+      ctx.stroke(); ctx.restore();
+    }
+    const differs = Math.abs(m - omega) > EPS;
+    if (state.curves){
+      curve(t => Math.cos(omega * t), C.faint, 1.3, []);
+      if (cplx) curve(t => Math.sin(omega * t), C.faint, 1.3, [2, 3]);
+    }
+    if (state.alias && differs){
+      curve(t => Math.cos(m * t), C.alias, 2.2, [7, 5]);
+      if (cplx) curve(t => Math.sin(m * t), C.alias, 2, [2, 4]);
+    }
+    ctx.strokeStyle = C.signal; ctx.fillStyle = C.signal; ctx.lineWidth = 1.6;
+    for (let n = 0; n <= N; n++){
+      const v = Math.cos(omega * n);
+      line(ctx, X(n), Y(0), X(n), Y(v));
+      ctx.beginPath(); ctx.arc(X(n), Y(v), 4.2, 0, TAU); ctx.fill();
+    }
+    if (cplx){
+      ctx.lineWidth = 2;
+      for (let n = 0; n <= N; n++){
+        const v = Math.sin(omega * n);
+        ctx.fillStyle = C.surface; ctx.fillRect(X(n) - 4, Y(v) - 4, 8, 8);
+        ctx.strokeRect(X(n) - 4, Y(v) - 4, 8, 8);
+      }
+    }
+  }
+
+  function drawLegend(){
+    const cplx = state.mode === 'complex', items = [];
+    items.push(`<span><i class="sw dot"></i>${cplx ? 'Amostras (parte real)' : 'Amostras x[n]'}</span>`);
+    if (cplx) items.push(`<span><i class="sw sq"></i>Amostras (parte imaginária)</span>`);
+    if (state.curves){
+      items.push(`<span><i class="sw" style="border-color:var(--faint)"></i>${cplx ? 'cos(ωt), sinal amostrado' : 'cos(ωt), a senoide amostrada'}</span>`);
+      if (cplx) items.push(`<span><i class="sw" style="border-color:var(--faint);border-top-style:dotted"></i>sin(ωt)</span>`);
+    }
+    if (state.alias) items.push(`<span><i class="sw" style="border-color:var(--alias);border-top-style:dashed"></i>Senoide mais lenta que passa pelas mesmas amostras</span>`);
+    $('legTime').innerHTML = items.join('');
+  }
+
+  /* circle */
+  function drawCircle(){
+    const { ctx, w, h } = setup($('cCircle'));
+    const omega = W(), cplx = state.mode === 'complex';
+    const cx = w / 2, cy = h / 2, Rr = Math.min(w, h) * 0.36;
+    const P = (a, r = Rr) => [cx + r * Math.cos(a), cy - r * Math.sin(a)];
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+    line(ctx, cx - Rr * 1.2, cy, cx + Rr * 1.2, cy);
+    line(ctx, cx, cy - Rr * 1.2, cx, cy + Rr * 1.2);
+    // unique range
+    ctx.save(); ctx.strokeStyle = C.band; ctx.lineWidth = 12;
+    ctx.beginPath();
+    if (cplx) ctx.arc(cx, cy, Rr, 0, TAU); else ctx.arc(cx, cy, Rr, 0, -PI, true);
+    ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = C.faint; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(cx, cy, Rr, 0, TAU); ctx.stroke();
+    // angle labels
+    ctx.font = `italic 15px ${C.serif}`; ctx.fillStyle = C.muted;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('0', cx + Rr + 12, cy - 10);
+    ctx.textAlign = 'right'; ctx.fillText(cplx ? '±π' : 'π', cx - Rr - 12, cy - 10);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('π/2', cx + 18, cy - Rr - 10);
+    ctx.textBaseline = 'top'; ctx.fillText('−π/2', cx + 22, cy + Rr + 10);
+    // sample path
+    ctx.save(); ctx.strokeStyle = C.faint; ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    for (let n = 0; n <= N; n++){ const [x, y] = P(omega * n); n ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke(); ctx.restore();
+    // spiral showing the total angle turned per sample
+    if (omega > 0.02){
+      const steps = 240, pts = [];
+      for (let i = 0; i <= steps; i++){
+        const th = omega * i / steps;
+        pts.push(P(th, Rr * (0.2 + 0.1 * th / TAU)));
+      }
+      ctx.save(); ctx.strokeStyle = C.signal; ctx.lineWidth = 1.6;
+      ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+      const a = pts[pts.length - 2], b = pts[pts.length - 1];
+      arrow(ctx, a[0], a[1], b[0], b[1], C.signal, 1.6);
+      ctx.restore();
+    }
+    // conjugate partner for real signals
+    if (!cplx){
+      const [x2, y2] = P(-omega, Rr * 0.97);
+      arrow(ctx, cx, cy, x2, y2, C.faint, 1.6, [5, 4]);
+      const [lx, ly] = P(-omega, Rr * 1.17);
+      ctx.font = `italic 15px ${C.serif}`; ctx.fillStyle = C.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('−ω', lx, ly);
+    }
+    const [x1, y1] = P(omega, Rr * 0.97);
+    arrow(ctx, cx, cy, x1, y1, C.signal, 2.2);
+    // sample dots and first labels
+    const seen = [];
+    for (let n = 0; n <= N; n++){
+      const [x, y] = P(omega * n);
+      ctx.fillStyle = C.signal; ctx.globalAlpha = 1 - 0.5 * n / N;
+      ctx.beginPath(); ctx.arc(x, y, 4.5, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+      if (n <= 3 && !seen.some(([sx, sy]) => Math.hypot(sx - x, sy - y) < 14)){
+        seen.push([x, y]);
+        const [lx, ly] = P(omega * n, Rr * 1.16);
+        ctx.font = `13px ${C.sans}`; ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('n=' + n, lx, ly);
+      }
+    }
+    ctx.font = `italic 16px ${C.serif}`; ctx.fillStyle = C.signal; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (omega > 0.02){ const [lx, ly] = P(Math.min(omega, 0.6) / 2 + 0.15, Rr * 0.33); ctx.fillText('ω', lx, ly); }
+  }
+
+  /* frequency axis */
+  function drawFreq(){
+    const { ctx, w, h } = setup($('cFreq'));
+    const omega = W(), m = principal(omega), cplx = state.mode === 'complex';
+    const lo = -2 * PI, hi = 4 * PI, L = 22, R = 22, T = 26, B = 48;
+    const pw = w - L - R, ph = h - T - B, base = T + ph;
+    const X = f => L + (f - lo) / (hi - lo) * pw;
+    ctx.fillStyle = C.band;
+    const a = cplx ? -PI : 0, b = PI;
+    ctx.fillRect(X(a), T - 6, X(b) - X(a), ph + 6);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2; line(ctx, L, base, L + pw, base);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let k = -2; k <= 4; k++){
+      const x = X(k * PI);
+      ctx.strokeStyle = C.ink; line(ctx, x, base, x, base + 5);
+      ctx.font = `italic 14px ${C.serif}`; ctx.fillStyle = C.ink; ctx.fillText(fmtPi(k * PI), x, base + 8);
+      ctx.font = `11px ${C.sans}`; ctx.fillStyle = C.muted; ctx.fillText(fsLabel(k), x, base + 26);
+    }
+    const pos = [];
+    for (let k = -4; k <= 4; k++){
+      pos.push(omega + TAU * k);
+      if (!cplx) pos.push(-omega + TAU * k);
+    }
+    const uniq = pos.filter((p, i) => p >= lo - EPS && p <= hi + EPS && pos.findIndex(q => Math.abs(q - p) < EPS) === i);
+    const kind = p => Math.abs(p - omega) < EPS ? 2 : Math.abs(p - m) < EPS ? 1 : 0;
+    uniq.sort((p, q) => kind(p) - kind(q));
+    for (const p of uniq){
+      const kd = kind(p), x = X(p);
+      const col = kd === 2 ? C.signal : kd === 1 ? C.alias : C.faint;
+      const top = base - ph * (kd === 2 ? 1 : kd === 1 ? 0.82 : 0.6);
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = kd ? 2.5 : 1.6;
+      line(ctx, x, base, x, top);
+      ctx.beginPath(); ctx.arc(x, top, kd ? 4.5 : 3.5, 0, TAU); ctx.fill();
+    }
+    const clamp = x => Math.max(L + 16, Math.min(L + pw - 16, x));
+    ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
+    ctx.font = `italic 15px ${C.serif}`; ctx.fillStyle = C.signal;
+    ctx.fillText('ω', clamp(X(omega)), base - ph - 6);
+    if (Math.abs(m - omega) > EPS){
+      ctx.font = `12px ${C.sans}`; ctx.fillStyle = C.alias;
+      ctx.fillText('seen as', clamp(X(m)), base - ph * 0.82 - 6);
+    }
+  }
+
+  /* text */
+  function explain(){
+    const w = W(), m = principal(w), r = ((w % TAU) + TAU) % TAU;
+    const Wt = fmtPi(w), M = fmtPi(m);
+    const whole = r < EPS || TAU - r < EPS;
+    if (state.mode === 'real'){
+      if (w < EPS) return 'At ω = 0 every sample equals 1: a constant (DC) sequence.';
+      if (Math.abs(w - PI) < EPS) return 'At ω = π the samples go 1, −1, 1, −1, … That is the fastest a sequence can alternate, so π is the highest frequency a real discrete-time signal can show.';
+      if (w < PI) return `Between 0 and π the samples follow cos(${Wt}·<i>n</i>) faithfully. No slower cosine passes through all of them.`;
+      if (whole) return `ω = ${Wt} is a whole number of turns. Since <i>e</i><sup><i>j</i>2π<i>kn</i></sup> = 1 for every integer <i>n</i>, every sample equals 1, exactly like ω = 0.`;
+      if (w < TAU) return `Above π the frequency folds back: cos((2π − θ)<i>n</i>) = cos(θ<i>n</i>), so these samples are identical to cos(${M}·<i>n</i>). This is aliasing.`;
+      if (r <= PI + EPS) return `Removing whole turns of 2π leaves ${M}. The extra 2π is invisible when <i>n</i> is an integer, so the samples match cos(${M}·<i>n</i>).`;
+      return `Removing whole turns of 2π leaves ${fmtPi(r)}, which is above π, so it folds back to ${M}. The samples match cos(${M}·<i>n</i>).`;
+    }
+    if (w < EPS) return 'At ω = 0 the phasor never moves: every sample equals 1.';
+    if (w < PI - EPS) return `Between −π and π every frequency is distinct. The phasor turns counterclockwise by ${Wt} per sample.`;
+    if (whole) return `A whole number of turns: <i>e</i><sup><i>j</i>${Wt}<i>n</i></sup> = 1 for every integer <i>n</i>, identical to ω = 0.`;
+    const pre = w >= TAU ? 'After removing whole turns of 2π, ' : '';
+    if (Math.abs(r - PI) < EPS) return pre + 'the phasor jumps half a turn per sample: 1, −1, 1, … Turning by +π or −π gives the same samples, so π and −π are the same frequency.';
+    if (r > PI) return `${pre}turning ${fmtPi(r)} counterclockwise lands on the same points as turning ${fmtPi(TAU - r)} clockwise, so the samples equal <i>e</i><sup><i>j</i>(${M})<i>n</i></sup>. Unlike the real case, ${fmtPi(TAU - r)} and ${M} are different signals here: the imaginary part flips sign. That’s why complex signals need the full range −π to π.`;
+    return `Removing whole turns of 2π leaves ${M}: the extra 2π is invisible at integer <i>n</i>.`;
+  }
+  function hzText(){
+    const w = W(), m = principal(w), fs = state.fs;
+    const f = w / TAU * fs, fa = m / TAU * fs;
+    const head = `With f<sub>s</sub> = ${fmtHz(fs)}, ω = ${fmtPi(w)} corresponds to f = ω·f<sub>s</sub>/2π = ${fmtHz(f)}.`;
+    if (Math.abs(f - fa) < 1e-6 * Math.max(1, fs)) return `${head} That is within the Nyquist limit of ${fmtHz(fs / 2)}, so it is represented faithfully.`;
+    return `${head} It lies beyond the Nyquist limit of ${fmtHz(fs / 2)}, so the samples look like ${fmtHz(fa)}.`;
+  }
+
+  function render(){
+    const w = W(), m = principal(w), cplx = state.mode === 'complex';
+    const txt = fmtPi(w);
+    $('wOut').textContent = 'ω = ' + txt;
+    slider.setAttribute('aria-valuetext', 'ômega igual a ' + txt);
+    presetBtns.forEach(({ b, p }) => b.setAttribute('aria-pressed', Math.abs(p - state.v) < 1e-6 ? 'true' : 'false'));
+    drawLegend(); drawTime();
+  }
+
+  /* events */
+  slider.addEventListener('input', () => { stopPlay(); state.v = parseFloat(slider.value); render(); });
+  function setMode(mode){
+    state.mode = mode;
+    $('mReal').setAttribute('aria-pressed', mode === 'real');
+    $('mCplx').setAttribute('aria-pressed', mode === 'complex');
+    render();
+  }
+  $('mReal').addEventListener('click', () => setMode('real'));
+  $('mCplx').addEventListener('click', () => setMode('complex'));
+  $('showCurves').addEventListener('change', e => { state.curves = e.target.checked; render(); });
+  $('showAlias').addEventListener('change', e => { state.alias = e.target.checked; render(); });
+
+  let last = null;
+  function tick(ts){
+    if (!state.playing) return;
+    if (last !== null){
+      state.v += (ts - last) / 1000 * 0.15;
+      if (state.v > 4) state.v -= 4;
+      slider.value = state.v;
+      render();
+    }
+    last = ts;
+    requestAnimationFrame(tick);
+  }
+  function stopPlay(){
+    state.playing = false; last = null;
+    $('play').setAttribute('aria-pressed', 'false'); $('play').textContent = 'Iniciar varredura';
+  }
+  $('play').addEventListener('click', () => {
+    if (state.playing){ stopPlay(); return; }
+    state.playing = true; last = null;
+    $('play').setAttribute('aria-pressed', 'true'); $('play').textContent = 'Pausar varredura';
+    requestAnimationFrame(tick);
+  });
+
+  const redraw = () => { readColors(); render(); };
+  try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw); } catch (e) {}
+  new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  let rq = null;
+  new ResizeObserver(() => { if (rq) cancelAnimationFrame(rq); rq = requestAnimationFrame(render); }).observe(document.querySelector('main'));
+
+  readColors(); render();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+})();
+</script>
+</body>
+</html>
